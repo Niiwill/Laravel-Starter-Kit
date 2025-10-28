@@ -1,0 +1,23 @@
+services:
+  laravel-frankenphp:
+    container_name: api
+    build:
+      context: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - /app/vendor
+    depends_on:
+      - db
+
+  db:
+    container_name: db
+    image: mysql:latest
+    environment:
+      MYSQL_USER: root
+      MYSQL_PASSWORD: secret
+    volumes:
+      - ./db-data:/var/lib/mysql
+    ports:
+      - "3306:3306"
