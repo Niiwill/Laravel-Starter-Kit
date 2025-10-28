@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     zip \
     pdo \
     pdo_mysql
+    
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/local/bin/composer
