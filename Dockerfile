@@ -1,28 +1,80 @@
-FROM php:8.4-fpm-alpine
+# Base stage
+FROM php:8.4-fpm-alpine AS base
 
-# System dependencies
-RUN apk add --no-cache unzip libzip-dev icu-dev shadow \
-    && docker-php-ext-install -j$(nproc) pdo_mysql opcache intl zip bcmath \
-    && rm -rf /tmp/*
+RUN apk add --no-cache \
+    unzip \
+    libzip-dev \
+    icu-dev \
+    && docker-php-ext-install -j$(nproc) \
+        pdo_mysql \
+        opcache \
+        intl \
+        zip \
+        bcmath \
+    && rm -rf /tmp/* /var/cache/apk/*
 
-# Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-
-RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
-
-# Set user ID to match host (default to 1000, can be overridden at build time)
-ARG UID=1000
-ARG GID=1000
-
-# Modify www-data user to use the specified UID/GID
-RUN usermod -u ${UID} www-data && groupmod -g ${GID} www-data
 
 WORKDIR /var/www
 
-# Copy and install as root
-COPY . /var/www
+# Development stage
+FROM base AS development
 
-RUN composer install --optimize-autoloader --no-interaction --no-progress --prefer-dist \
+RUN mv "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini"
+
+# Add custom settings for development
+COPY docker/php-dev.ini "$PHP_INI_DIR/conf.d/custom.ini"
+
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+RUN apk add --no-cache shadow \
+    && usermod -u ${USER_ID} www-data \
+    && groupmod -g ${GROUP_ID} www-data \
+    && chown -R www-data:www-data /var/www \
+    && apk del shadow
+
+COPY . .
+
+RUN composer install \
+    --no-interaction \
+    --no-progress \
+    --prefer-dist \
+    --no-scripts \
+    --no-autoloader
+
+RUN composer dump-autoload --optimize
+
+EXPOSE 9000
+USER www-data
+CMD ["php-fpm"]
+
+# Production stage
+FROM base AS production
+
+RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+
+# Copy composer files first
+COPY composer.json composer.lock ./
+
+# Install only production dependencies
+RUN composer install \
+    --optimize-autoloader \
+    --no-interaction \
+    --no-progress \
+    --no-dev \
+    --prefer-dist \
+    --no-scripts \
+    --no-autoloader
+
+# Copy rest of application
+COPY . .
+
+# Generate autoloader and optimize Laravel
+RUN composer dump-autoload --optimize --classmap-authoritative \
+    && php artisan config:cache \
+    && php artisan route:cache \
+    && php artisan view:cache \
     && chown -R www-data:www-data /var/www
 
 USER www-data

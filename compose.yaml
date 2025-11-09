@@ -1,18 +1,18 @@
 services:
-
   api:
     container_name: api
     build:
       context: .
+      target: development
       args:
-        UID: ${UID:-1000}
-        GID: ${GID:-1000}
+        USER_ID: ${UID:-1000}
+        GROUP_ID: ${GID:-1000}
     ports:
       - "9000:9000"
     volumes:
       - .:/var/www
-    user: "${UID:-1000}:${GID:-1000}"
-
+      - /var/www/vendor
+    user: root     
     depends_on:
       - mysql
 
