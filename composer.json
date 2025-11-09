@@ -14,6 +14,7 @@
     "require-dev": {
         "driftingly/rector-laravel": "^2.1",
         "fakerphp/faker": "^1.23",
+        "larastan/larastan": "^3.0",
         "laravel/pail": "^1.2.2",
         "laravel/pint": "^1.13",
         "laravel/sail": "^1.41",
@@ -67,9 +68,11 @@
         "test:rector": [
             "rector --dry-run"
         ],
+        "test:types": "phpstan",
         "test": [
             "@test:pint",
-            "@test:rector"
+            "@test:rector",
+            "@test:types"
         ]
     },
     "extra": {

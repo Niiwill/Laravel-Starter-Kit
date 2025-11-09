@@ -1,27 +1,31 @@
-FROM dunglas/frankenphp
+FROM php:8.4-fpm-alpine
 
-# Set working directory
-WORKDIR /app
+# System dependencies
+RUN apk add --no-cache unzip libzip-dev icu-dev shadow \
+    && docker-php-ext-install -j$(nproc) pdo_mysql opcache intl zip bcmath \
+    && rm -rf /tmp/*
 
-# Install system dependencies and PHP extensions
-RUN apt-get update && apt-get install -y \
-    git \
-    unzip \
-    && rm -rf /var/lib/apt/lists/* \
-    && install-php-extensions \
-    pcntl \
-    zip \
-    pdo \
-    pdo_mysql
-    
+# Composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
-# Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/local/bin/composer
+RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
-# Copy application code
-COPY . .
+# Set user ID to match host (default to 1000, can be overridden at build time)
+ARG UID=1000
+ARG GID=1000
 
-# Install PHP dependencies (production only)
-RUN composer install --no-interaction --prefer-dist --optimize-autoloader
+# Modify www-data user to use the specified UID/GID
+RUN usermod -u ${UID} www-data && groupmod -g ${GID} www-data
 
-ENTRYPOINT ["php", "artisan", "octane:frankenphp", "--workers=1", "--max-requests=1"]
+WORKDIR /var/www
+
+# Copy and install as root
+COPY . /var/www
+
+RUN composer install --optimize-autoloader --no-interaction --no-progress --prefer-dist \
+    && chown -R www-data:www-data /var/www
+
+USER www-data
+
+EXPOSE 9000
+CMD ["php-fpm"]

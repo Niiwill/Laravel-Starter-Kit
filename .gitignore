@@ -26,4 +26,4 @@ Thumbs.db
 **/caddy
 frankenphp
 frankenphp-worker.php
-/db-data/*
+/docker/mysql/*
