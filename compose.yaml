@@ -1,4 +1,19 @@
 services:
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"  # Access your API via http://localhost (or your domain)
+    volumes:
+      - ./:/var/www:ro  # Share your Laravel code (adjust path if needed); :ro for read-only in Nginx
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro  # Your custom Nginx config
+    depends_on:
+      - api
+    networks:
+    - app-network  # Ensure both services are on the same network
+
   api:
     container_name: api
     build:
@@ -14,8 +29,10 @@ services:
       - /var/www/vendor
     user: root     
     depends_on:
-      - mysql
-
+      mysql:
+        condition: service_healthy
+    networks:
+    - app-network  # Ensure both services are on the same network
   
   mysql:
       image: 'mysql:8.4'
@@ -35,3 +52,9 @@ services:
           test: ['CMD', 'mysqladmin', 'ping', '-p${DB_PASSWORD}']
           retries: 3
           timeout: 5s
+      networks:
+      - app-network  # Ensure both services are on the same network
+
+networks:
+  app-network:
+    driver: bridge
