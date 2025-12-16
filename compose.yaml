@@ -35,25 +35,27 @@ services:
     - app-network  # Ensure both services are on the same network
   
   mysql:
-      image: 'mysql:8.4'
-      container_name: mysql
-      ports:
-          - '3306:3306'
-      environment:
-          MYSQL_ROOT_PASSWORD: '${DB_PASSWORD}'
-          MYSQL_ROOT_HOST: '%'
-          MYSQL_DATABASE: '${DB_DATABASE}'
-          MYSQL_USER: '${DB_USERNAME}'
-          MYSQL_PASSWORD: '${DB_PASSWORD}'
-          MYSQL_ALLOW_EMPTY_PASSWORD: 1
-      volumes:
-          - '/docker/mysql:/var/lib/mysql'
-      healthcheck:
-          test: ['CMD', 'mysqladmin', 'ping', '-p${DB_PASSWORD}']
-          retries: 3
-          timeout: 5s
-      networks:
-      - app-network  # Ensure both services are on the same network
+    image: mysql:8.4
+    container_name: mysql_db  # Optional, but avoid conflicts
+    restart: unless-stopped
+    ports:
+      - "3306:3306"  # Only for local access (e.g., TablePlus, MySQL Workbench)
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}  # Same as root in your case
+    volumes:
+      - ./docker/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - app-network
+
 
 networks:
   app-network:

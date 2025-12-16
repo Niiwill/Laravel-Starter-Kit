@@ -36,5 +36,11 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+    
+    'okta' => [
+        'domain' => env('OKTA_DOMAIN'),
+        'audience' => env('OKTA_AUDIENCE'),
+        'issuer' => env('OKTA_ISSUER'),
+    ],
 
 ];
