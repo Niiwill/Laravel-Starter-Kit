@@ -3,10 +3,12 @@
 namespace App\Http\Middleware;
 
 use Closure;
+use App\Auth\JwtUser;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use Firebase\JWT\JWK;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -50,7 +52,7 @@ class VerifyOktaToken
                 'sub' => '00u1dummyid',
                 'name' => 'John Doe',
                 'email' => 'john@example.com',
-                'roles' => ['admin'],
+                'roles' => ['controllor'],
                 'iat' => time(),
                 'exp' => time() + 3600,
                 'aud' => 'api://default',
@@ -72,15 +74,13 @@ class VerifyOktaToken
                 throw new \Exception('Token expired');
             }
 
-            // Add user info to request
-            $request->merge([
-                'user' => [
-                    'id' => $decoded->sub ?? null,
-                    'email' => $decoded->email ?? null,
-                    'name' => $decoded->name ?? null,
-                    'roles' => $decoded->roles ?? [] // if Okta sends groups/roles
-                ]
-            ]);
+            $user = new JwtUser(
+                id: $decoded->sub,
+                email: $decoded->email ?? null,
+                roles: $decoded->roles ?? $decoded->groups ?? []
+            );
+
+            Auth::setUser($user);
 
             return $next($request);
 

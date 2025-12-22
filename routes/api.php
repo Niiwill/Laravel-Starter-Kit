@@ -12,7 +12,10 @@ Route::get('/user', function (Request $request) {
 // Index route for API
 Route::middleware('verify-okta')->get('/', function (Request $request) {
 
-    return response()->json(['message' => 'Welcome to the API!', 'user' => $request->user]);
+    // Get authenticated user from the request
+    $user = $request->user();
+
+    return response()->json(['message' => 'Welcome to the API!', 'user' => $user->email]);
 
     // return response()->json(['message' => 'Welcome to the API!']);
 });
