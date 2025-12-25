@@ -63,10 +63,10 @@ class VerifyOktaToken
             if ($decoded->iss !== $this->issuer) {
                 throw new \Exception('Invalid issuer');
             }
-
+            
             // Verify audience
-            if (!in_array($this->audience, (array)$decoded->aud)) {
-                throw new \Exception('Invalid audience');
+            if ($decoded->aud !== $this->audience) {
+                throw new \Exception("Invalid Audience");
             }
 
             // Verify expiration
