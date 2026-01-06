@@ -1,5 +1,10 @@
-# Build arguments for flexibility
-ARG PHP_VERSION=8.4
+#Build arguments for flexibility
+ARG PHP_VERSION=8.5
+
+# ==============================================================================
+# 0. PHP Extension Installer Stage
+# ==============================================================================
+FROM mlocati/php-extension-installer:latest AS php-extension-installer
 
 # ==============================================================================
 # 1. BASE: Shared foundation for all stages
@@ -7,7 +12,7 @@ ARG PHP_VERSION=8.4
 FROM php:${PHP_VERSION}-fpm-alpine AS base
 
 # Install PHP extension installer
-COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
+COPY --from=php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 
 # Install system dependencies and PHP extensions in one layer
 RUN apk add --no-cache \
@@ -28,10 +33,15 @@ RUN apk add --no-cache \
 WORKDIR /var/www
 
 # ==============================================================================
-# 2. BUILD: Install Dependencies (Composer)
+# 2. Composer Stage
+# ==============================================================================
+FROM composer:latest AS composer
+
+# ==============================================================================
+# 3. BUILD: Install Dependencies (Composer)
 # ==============================================================================
 FROM base AS build
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+COPY --from=composer /usr/bin/composer /usr/bin/composer
 
 # Copy only dependency files for caching
 COPY composer.json composer.lock ./
@@ -46,12 +56,12 @@ COPY . .
 RUN composer dump-autoload --optimize --classmap-authoritative --no-dev
 
 # ==============================================================================
-# 3. DEVELOPMENT: Local Dev Environment
+# 4. DEVELOPMENT: Local Dev Environment
 # ==============================================================================
 FROM base AS development
 
 # Install Composer for dev use
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+COPY --from=composer /usr/bin/composer /usr/bin/composer
 
 # Use the default development configuration
 RUN mv "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini"
@@ -61,7 +71,7 @@ ARG USER_ID=1000
 ARG GROUP_ID=1000
 RUN apk add --no-cache shadow \
     && usermod -u ${USER_ID} www-data \
-    && groupmod -g ${GROUP_ID} www-data-l
+    && groupmod -g ${GROUP_ID} www-data
 
 # Switch to user
 USER www-data
@@ -69,7 +79,7 @@ USER www-data
 CMD ["php-fpm"]
 
 # ==============================================================================
-# 4. PRODUCTION: Lean, Secure, Optimized
+# 5. PRODUCTION: Lean, Secure, Optimized
 # ==============================================================================
 FROM base AS production
 
@@ -95,5 +105,3 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     cgi-fcgi -bind -connect 127.0.0.1:9000 || exit 1
 
 EXPOSE 9000
-
-CMD ["php-fpm"]
