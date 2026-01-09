@@ -1,107 +1,105 @@
-#Build arguments for flexibility
-ARG PHP_VERSION=8.5
-
-# ==============================================================================
-# 0. PHP Extension Installer Stage
-# ==============================================================================
+# Global ARG for version consistency
+ARG PHP_VERSION=8.4
 FROM mlocati/php-extension-installer:latest AS php-extension-installer
 
 # ==============================================================================
-# 1. BASE: Shared foundation for all stages
+# 1. BASE: Minimal OS with PHP and core extensions
 # ==============================================================================
 FROM php:${PHP_VERSION}-fpm-alpine AS base
 
-# Install PHP extension installer
+# System-level dependencies and Extension Installer
 COPY --from=php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 
-# Install system dependencies and PHP extensions in one layer
-RUN apk add --no-cache \
-    icu-data-full \
-    fcgi \
+# Install PHP extensions required for Laravel 12 APIs
+RUN apk add --no-cache icu-data-full \
     && install-php-extensions \
     bcmath \
     intl \
     opcache \
     pdo_mysql \
     zip \
-    gd \
-    exif \
     pcntl \
     redis \
-    && rm -rf /tmp/* /var/cache/apk/*
+    sodium \
+    exif
 
 WORKDIR /var/www
 
 # ==============================================================================
-# 2. Composer Stage
+# 2. VENDOR: Focused dependency installation
 # ==============================================================================
-FROM composer:latest AS composer
+FROM composer:2 AS vendor
 
-# ==============================================================================
-# 3. BUILD: Install Dependencies (Composer)
-# ==============================================================================
-FROM base AS build
-COPY --from=composer /usr/bin/composer /usr/bin/composer
+WORKDIR /var/www
 
-# Copy only dependency files for caching
 COPY composer.json composer.lock ./
 
-# Install without scripts or autoloader to avoid errors
-RUN composer install --no-dev --no-scripts --no-autoloader --no-interaction --prefer-dist
-
-# Copy full code now that dependencies are installed
-COPY . .
-
-# Dump autoloader, which triggers scripts safely
-RUN composer dump-autoload --optimize --classmap-authoritative --no-dev
+RUN composer install \
+    --no-dev \
+    --no-scripts \
+    --no-autoloader \
+    --no-interaction \
+    --prefer-dist
 
 # ==============================================================================
-# 4. DEVELOPMENT: Local Dev Environment
+# 3. DEVELOPMENT: Built for local DX
 # ==============================================================================
 FROM base AS development
 
-# Install Composer for dev use
-COPY --from=composer /usr/bin/composer /usr/bin/composer
+# Bring in Composer for local package management
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Use the default development configuration
+# Use development INI settings
 RUN mv "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini"
 
-# Create a user with the same ID as your host user (avoids permission issues)
+# Map user/group IDs to host to prevent permission headaches in volumes
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 RUN apk add --no-cache shadow \
     && usermod -u ${USER_ID} www-data \
     && groupmod -g ${GROUP_ID} www-data
 
-# Switch to user
 USER www-data
 
+EXPOSE 9000
 CMD ["php-fpm"]
 
 # ==============================================================================
-# 5. PRODUCTION: Lean, Secure, Optimized
+# 4. PRODUCTION: Immutable, Hardened, and Fast
 # ==============================================================================
 FROM base AS production
 
-# Production PHP/OPcache settings
+# Production PHP settings
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
+# Optimized OPcache & JIT Configuration
 COPY ./docker/php/opcache.ini $PHP_INI_DIR/conf.d/opcache.ini
 
-COPY --from=build --chown=www-data:www-data /var/www /var/www
+# Install fcgi only in production for the healthcheck
+RUN apk add --no-cache fcgi
 
-# Security: Set application root to read-only, specifically allow storage/cache
-RUN chmod -R 755 /var/www && \
-    chmod -R 775 /var/www/storage /var/www/bootstrap/cache
-    
-# Final cleanup
-RUN rm -rf /tmp/* /var/tmp/* /var/cache/apk/*
+# 1. Copy dependencies from vendor stage
+COPY --from=vendor /var/www/vendor /var/www/vendor
+
+# 2. Copy application code
+COPY . .
+
+# 3. Final Composer optimization (no-dev)
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+RUN composer dump-autoload --optimize --classmap-authoritative --no-dev \
+    && rm /usr/bin/composer
+
+# 4. Hardened Permissions: 
+# Root owns the code (read-only for www-data), www-data owns the writable paths
+RUN chown -R root:root /var/www \
+    && chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache \
+    && chmod -R 775 /var/www/storage /var/www/bootstrap/cache
 
 USER www-data
 
-# Lightweight healthcheck using PHP-FPM status
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD SCRIPT_NAME=/ping SCRIPT_FILENAME=/ping REQUEST_METHOD=GET \
     cgi-fcgi -bind -connect 127.0.0.1:9000 || exit 1
 
 EXPOSE 9000
+CMD ["php-fpm"]
