@@ -73,10 +73,11 @@ FROM base AS production
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
 # Optimized OPcache & JIT Configuration
-COPY ./docker/php/opcache.ini $PHP_INI_DIR/conf.d/opcache.ini
+COPY ./docker/opcache.ini $PHP_INI_DIR/conf.d/opcache.ini
 
-# Install fcgi only in production for the healthcheck
-RUN apk add --no-cache fcgi
+# Enable PHP-FPM built-in ping + status + install fcgi (Alpine)
+RUN sed -i 's/;ping\.path = \/ping/ping.path = \/ping/' /usr/local/etc/php-fpm.d/www.conf && \
+    apk add --no-cache fcgi
 
 # 1. Copy dependencies from vendor stage
 COPY --from=vendor /var/www/vendor /var/www/vendor

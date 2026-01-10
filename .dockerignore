@@ -1,0 +1,5 @@
+docker/mysql/**
+bootstrap/cache/*.php
+storage/framework/cache/*.php
+storage/framework/views/*.php
+**/vendor
